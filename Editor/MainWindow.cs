@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -302,3 +303,5 @@ public class MainWindow : EditorWindow
         AssetDatabase.DeleteAsset("Assets/tempControllers.prefab");
     }
 }
+
+#endif // UNITY_EDITOR

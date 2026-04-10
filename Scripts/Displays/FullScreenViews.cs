@@ -17,6 +17,7 @@
 //#define PERSIST_AS_EDITOR_PREFS
 #define PERSIST_AS_RESOURCE
 
+#if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
 using System;
@@ -490,3 +491,4 @@ namespace Gimbl
         }
     }
 }
+#endif // UNITY_EDITOR

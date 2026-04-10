@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 ﻿using UnityEngine;
 using UnityEditor;
 using System.Linq;
@@ -274,3 +275,4 @@ public class ActorWindow : EditorWindow
     }
 
 }
+#endif // UNITY_EDITOR

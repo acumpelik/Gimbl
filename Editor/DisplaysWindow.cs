@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -213,3 +214,4 @@ public class DisplaysWindow : EditorWindow
         settings.name = "";
     }
 }
+#endif // UNITY_EDITOR

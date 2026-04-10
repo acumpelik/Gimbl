@@ -107,6 +107,7 @@ public class PerspectiveProjection : MonoBehaviour
             Vector3 vn = -Vector3.Cross(vr, vu); // Normal vector of screen. Need minus sign because of unities left-handed coordinate system.
 
             float d = -Vector3.Dot(va, vn); //distance from eye to screen.
+            if (d <= 0.0001f) { return; } // degenerate: eye on or behind screen plane
             if (setNearClipPlane)
             {
                 n = d + nearClipDistanceOffset;

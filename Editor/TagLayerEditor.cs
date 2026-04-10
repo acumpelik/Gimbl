@@ -1,4 +1,5 @@
-﻿using UnityEditor;
+﻿#if UNITY_EDITOR
+using UnityEditor;
 using UnityEngine;
 using System.Collections;
 // Taken from https://answers.unity.com/questions/33597/is-it-possible-to-create-a-tag-programmatically.html
@@ -210,3 +211,4 @@ namespace TagLayerEditor
         }
     }
 }
+#endif // UNITY_EDITOR

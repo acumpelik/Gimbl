@@ -1,7 +1,9 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 using System.Linq;
 
 namespace Gimbl
@@ -153,6 +155,7 @@ namespace Gimbl
 
         }
 
+#if UNITY_EDITOR
         public void InitiateActor(string modelStr, bool trackCam)
         {
             gameObject.transform.SetParent(GameObject.Find("Actors").transform);
@@ -264,6 +267,7 @@ namespace Gimbl
 
             EditorGUILayout.EndVertical();
         }
+#endif // UNITY_EDITOR
     }
 
 }

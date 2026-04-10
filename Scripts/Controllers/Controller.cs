@@ -1,7 +1,9 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 
 namespace Gimbl
 {
@@ -93,6 +95,7 @@ namespace Gimbl
             return size;
         }
 
+#if UNITY_EDITOR
         public void InitiateController()
         {
             gameObject.transform.SetParent(GameObject.Find("Controllers").transform);
@@ -161,6 +164,7 @@ namespace Gimbl
             else { EditorGUILayout.LabelField(string.Format("<color=#EE0000>{0}</color> - {1}", name,type), LayoutSettings.controllerLabel); }
             EditorGUILayout.EndHorizontal();
         }
+#endif // UNITY_EDITOR
 
     }
 
