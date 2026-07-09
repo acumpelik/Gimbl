@@ -13,10 +13,14 @@ namespace Gimbl
     /// Receives position (and other) messages from behaviorMate over UDP and
     /// drives a Gimbl actor, replacing vrMate as the VR renderer.
     ///
-    /// DAY 1 SCOPE (prove the pipe): open the UDP socket on a background thread,
-    /// queue every datagram, drain the queue on the main thread each Update(),
-    /// parse it, and Debug.Log the "position" message. No transform is moved yet
-    /// (that is Day 2).
+    /// DAY 1 (prove the pipe): open the UDP socket on a background thread, queue
+    /// every datagram, drain the queue on the main thread each Update(), parse it,
+    /// and Debug.Log the "position" message.
+    ///
+    /// DAY 2 (drive the actor): if an <see cref="actor"/> transform is assigned,
+    /// apply parsed["position"]["y"] to it with vrMate's axis swap (msg y (track)
+    /// -&gt; Unity Z), absolute (set, not incremental). Leaving actor empty keeps
+    /// the Day-1 log-only behaviour.
     ///
     /// Protocol (see integration handoff §5): behaviorMate sends one ASCII JSON
     /// object per datagram to the display controller's ip:send_port. The only
@@ -35,6 +39,16 @@ namespace Gimbl
 
         [Tooltip("Log the non-position messages we ignore (action/view/fog/editContext), for debugging behaviorMate's stream.")]
         public bool logIgnoredMessages = false;
+
+        [Header("Day 2 — drive the actor")]
+        [Tooltip("The actor transform to move down the corridor (e.g. the Gimbl 'Mouse'/Actor rig). Leave empty to only log (Day 1 behaviour).")]
+        public Transform actor;
+
+        [Tooltip("Scales behaviorMate's position into Unity world units before it is applied. behaviorMate emits cm; leave at 1 for Day 2 and tune during Day 3 calibration.")]
+        public float positionScale = 1.0f;
+
+        [Tooltip("Reverse the direction of travel if spinning the wheel runs the mouse backwards down the corridor.")]
+        public bool invert = false;
 
         private UdpClient client;
         private Thread receiveThread;
@@ -126,15 +140,30 @@ namespace Gimbl
 
             if (parsed["position"] != null)
             {
-                // Day 1: just report it. Day 2 applies parsed["position"]["y"]
-                // to the actor's Unity Z (vrMate axis swap).
+                JSONNode pos = parsed["position"];
+
                 if (logPositions)
                 {
-                    JSONNode pos = parsed["position"];
                     Debug.Log(string.Format("BehaviorMate position: y={0} (x={1}, z={2})",
                         pos["y"] != null ? pos["y"].AsFloat.ToString() : "-",
                         pos["x"] != null ? pos["x"].AsFloat.ToString() : "-",
                         pos["z"] != null ? pos["z"].AsFloat.ToString() : "-"));
+                }
+
+                // Day 2: drive the actor. vrMate axis swap — msg y (track) -> Unity Z,
+                // msg z (altitude) -> Unity Y, msg x -> Unity X. Absolute set (not
+                // incremental). Transform is written directly, bypassing Gimbl's
+                // LinearTreadmill/PathCreator (fine for a straight corridor, handoff §5).
+                // We are on the main thread here (Update -> HandleMessage), so this
+                // transform write is legal.
+                if (actor != null && pos["y"] != null)
+                {
+                    float dir = invert ? -1f : 1f;
+                    Vector3 p = actor.position;
+                    p.z = pos["y"].AsFloat * positionScale * dir;   // track distance
+                    if (pos["x"] != null) p.x = pos["x"].AsFloat * positionScale;
+                    if (pos["z"] != null) p.y = pos["z"].AsFloat * positionScale;  // altitude
+                    actor.position = p;
                 }
             }
             else if (logIgnoredMessages)
