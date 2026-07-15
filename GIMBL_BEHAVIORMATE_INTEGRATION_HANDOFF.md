@@ -1,6 +1,20 @@
+
 # Gimbl ↔ behaviorMate Integration — Handoff Brief
 
 *Purpose: brief a Claude Code agent so it can help implement a Gimbl-based VR renderer driven by behaviorMate, replacing vrMate. Written after reading the source of behaviorMate, vrMate (mcum96 fork), upstream Gimbl, and Andrea's GimblFork.*
+
+---
+
+## Current status (2026-07-13)
+
+- ✅ **Days 1–5 done.** The full pipe is up and running on the real rig:
+  1. **Days 1–2 — pipe + actor.** Wheel → behaviorMate → Gimbl proven; the physical wheel moves the actor through Andrea's real GimblEnv environments in Unity Hub Play mode.
+  2. **Day 3 — full screen (was blocked, now resolved).** Achieved with **Gimbl's native full-screen path**, not a code port — Displays window → assign eye-camera → Play → Show Full-Screen Views.
+  3. **Day 4 — three screens with rotation warp. ✅ Running.** Done via **Gimbl's native multi-display** (`FullScreenViews` + `PerspectiveProjection` + `MyMonitorSetup.prefab`'s Center/Left −90°/Right +90° surfaces) — **NOT** a vrMate `MultiDisplayController` port. The earlier plan to port vrMate here is superseded.
+  4. **Day 5 — calibration. ✅ Sufficient.** Minimal but adequate: **1 Unity unit = 3 cm** (behaviorMate broadcasts mm/10 = cm). Working values: behaviorMate `track_length = 3600`, receiver `Position Scale ≈ 0.3333` (120 Unity / 360 cm). We have the numbers to compute a behaviorMate landmark position → Unity landmark position. Speed/feel confirmed good by eye. Lap reset is free (behaviorMate zeros `position.y` at lap end).
+- **Next priority:**
+  1. **Day 6 — parity + docs.** Launch-order tolerance, port cleanup, lap-reset test; confirm on-screen position matches behaviorMate's log + landmark layout; document the working config.
+  2. **Deferred (not needed yet):** the shared landmark table for landmark-accurate reward alignment — Andrea is still far from the RL/reward work that would consume it. We already have the conversion math when it's needed.
 
 ---
 
@@ -101,23 +115,27 @@ ML-Agents is **not** part of Gimbl — it's a separate Unity package + Agent cod
 5. **Launch ordering.** Historically the renderer must be listening before behaviorMate starts a run. Make the receiver tolerant of starting mid-stream.
 6. **Bypassing Gimbl's controller/path machinery.** Setting the transform directly means no PathCreator/gain/smoothing. Fine for straight linear tracks; revisit only if tracks ever curve (they won't, per assumptions).
 7. **Cross-version asset reuse (mostly avoided now).** Because geometry is Unity-authored (not streamed), we no longer need to port vrMate's 2019 prefabs into 2023 — this deletes a big former risk. Only `SimpleJSON.cs` (pure C#) crosses over.
-8. **Editor-only display code / no standalone build.** Fine for single-screen Play-mode prototype. Multi-screen off-axis (the `view` messages + Gimbl `PerspectiveProjection` + `FullScreenViews`) is a **separate later phase** and out of scope here.
-9. **Blocking dependency: GimblEnv access.** Coordinate math and camera rig depend on Andrea's actual scene. Prototype on GimblFork meanwhile; mark scene-dependent values clearly.
+8. ~~**Editor-only display code / no standalone build.**~~ **Resolved.** Full screen (1 display) and 3 displays with a side-screen rotation warp are both **running in Editor Play mode** via Gimbl's native display layer (`FullScreenViews` + `PerspectiveProjection` + `MyMonitorSetup.prefab`), driven from the Displays window. No standalone build needed; no vrMate `MultiDisplayController` port needed (that earlier plan is superseded).
+9. ~~**Blocking dependency: GimblEnv access.**~~ **Resolved** — GimblEnv access obtained; wheel-driven movement through real GimblEnv environments confirmed working in Unity Hub Play mode. Coordinate/scale calibration against the authored scene (item 2 above) still needs GimblEnv's actual scene and is intentionally deprioritized until after the 3-screen display work lands.
 10. **Multi-screen ≠ RNN concern.** The physical 3-screen warped rig is deferred to the display layer and never affects the RNN/prototype (single flat eye-camera is canonical).
 
 ## 8. Roadmap / goals
 
 **Phase 0 — prerequisites (human):** obtain GimblEnv access; confirm the linear scene + actor/camera rig; produce the shared landmark table; resolve the MQTT-broker-on-boot choice.
 
-**Day 1 — prove the pipe.** GimblFork/GimblEnv opens in Unity 2023 and enters Play mode; MQTT-on-boot handled. Add `BehaviorMateReceiver` (UDP:4020 → background thread → queue → `Debug.Log` each message) + `SimpleJSON.cs`. Point behaviorMate `settings.json` `display_1` at the Gimbl PC; kill vrMate. **Goal: real session's `position` messages stream into the Unity console.**
+**Day 1 — prove the pipe. ✅ Done.** GimblFork/GimblEnv opens in Unity 2023 and enters Play mode; MQTT-on-boot handled. Added `BehaviorMateReceiver` (UDP:4020 → background thread → queue → `Debug.Log` each message) + `SimpleJSON.cs`. Point behaviorMate `settings.json` `display_1` at the Gimbl PC; kill vrMate. **Goal: real session's `position` messages stream into the Unity console.**
 
-**Day 2 — position → moving camera (headline).** Parse `position.y`, apply to actor with vrMate's axis swap (msg `y` → Unity Z). Bare corridor to visualize motion. Single flat eye-camera, single Game view. **Goal: spin the wheel → mouse runs down the corridor in Gimbl, live, from the real rig.**
+**Day 2 — position → moving camera (headline). ✅ Done.** Parse `position.y`, apply to actor with vrMate's axis swap (msg `y` → Unity Z). Confirmed against real GimblEnv environments in Unity Hub, not just the GimblFork prototype. **Goal: spin the wheel → mouse runs down the corridor in Gimbl, live, from the real rig.**
 
-**Day 3 — load the real scene + calibrate.** Load one of Andrea's linear scenes; calibrate behaviorMate position → scene coordinates so the mouse lands on the authored landmarks. **Goal: mouse position is correct relative to real landmarks.**
+**Day 3 — single screen, full screen, Play mode. ✅ Done.** Achieved via Gimbl's native full-screen path (Displays window → assign eye-camera → Play → Show Full-Screen Views), not a code port. **Goal met: Gimbl/GimblEnv renders full screen on one display in Play mode.**
 
-**Day 4 — parity + docs.** Tolerate launch order / port cleanup; test lap reset. Confirm on-screen position matches behaviorMate's log and the landmark layout (proves lab compatibility is untouched). Document what works + the next-milestone punch list (multi-screen off-axis, reward RL, ML-Agents observation camera). **Goal: reproducible single-screen behaviorMate→Gimbl renderer.**
+**Day 4 — three screens with rotation warp. ✅ Done.** Used Gimbl's native multi-display (`FullScreenViews` + `PerspectiveProjection` + `MyMonitorSetup.prefab`'s Center/Left −90°/Right +90° surfaces) — the vrMate `MultiDisplayController` port originally planned here was **not** needed. **Goal met: full 3-screen VR rig running off Gimbl, driven by the real rig.**
 
-**Later phases (out of scope):** 3-screen off-axis display; RNN reward/RL referencing the landmark table; ensuring the ML-Agents observation camera == the canonical eye-camera.
+**Day 5 — load the real scene + calibrate. ✅ Done (minimal but sufficient).** Real linear scene (`InfiniteCorridorTask` / `InfiniteTrack.unity`) loaded; calibrated to **1 Unity unit = 3 cm** (`track_length = 3600`, receiver `Position Scale ≈ 0.3333`). We have the numbers to convert any behaviorMate landmark position → Unity landmark position; speed/feel confirmed good by eye. **Goal met: mouse position is correct relative to real landmarks.**
+
+**Day 6 — parity + docs. ⏭️ Next.** Tolerate launch order / port cleanup; test lap reset. Confirm on-screen position matches behaviorMate's log and the landmark layout (proves lab compatibility is untouched). Document what works + the next-milestone punch list (reward RL, ML-Agents observation camera). **Goal: reproducible behaviorMate→Gimbl renderer across all 3 screens.**
+
+**Later phases (out of scope):** RNN reward/RL referencing the landmark table; ensuring the ML-Agents observation camera == the canonical eye-camera.
 
 ## 9. Open questions for the human (the agent should ask / not guess)
 
