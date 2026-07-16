@@ -1,6 +1,6 @@
 # Gimbl ↔ behaviorMate — Mid-Session VR Context Switching (Planning Doc)
 
-*Purpose: brief an implementer (fresh Claude Code session or a labmate) to build behaviorMate-driven mid-session VR context switching in Gimbl. Written 2026-07-16 after inspecting behaviorMate's Java source, Gimbl's `BehaviorMateReceiver`, and the config format. This is a plan, not yet implemented (v1 is the first build target).*
+*Purpose: brief an implementer (fresh Claude Code session or a labmate) to build behaviorMate-driven mid-session VR context switching in Gimbl. Written 2026-07-16 after inspecting behaviorMate's Java source, Gimbl's `BehaviorMateReceiver`, and the config format. **Update 2026-07-16: v1 is IMPLEMENTED and switching live on the rig** (all 7 steps — see the "v1 status" box in §4). §7 is the current forward plan.*
 
 ---
 
@@ -77,6 +77,13 @@ Rejected the alternative (Gimbl builds from behaviorMate's streamed `vr_config`)
 6. **TDML enrichment** — add `lap#` + `vr_file` to the context log line.
 7. **Verify (live)** — run the rig; confirm the switch fires at the lap boundary, geometry/skybox correct, actor continuous, TDML records the switch. Add a dev-only hook (menu/inspector button "load context X") to Play-test a context without behaviorMate.
 
+### v1 status — DONE, switching live on the rig (2026-07-16)
+All 7 steps implemented; A→B switch at lap 5 verified live (behaviorMate start/stop drives the Gimbl re-render).
+- **GimblEnv** (`acumpelik/GimblEnv`, branch `mouse_VR`): `Assets/Scripts/VRContextBuilder.cs` (runtime .vr→subtree), `VRContext.cs` (handle), `ContextManager.cs` (preload + `SwitchTo` toggle + skybox + repoint `LinearTreadmill.path` + track-length guardrail + builds at world origin), `VRContextLoader.cs` (solo dev tester); `Assets/Editor/ContextManagerEditor.cs` (inspector Switch buttons) + `VRContextImporter.cs` (thin Editor caller of the builder). Rig test scene `Assets/empty_corridor.unity`.
+- **GimblFork** (`acumpelik/GimblFork`, branch `behavior-mate`): `Scripts/BehaviorMate/BehaviorMateReceiver.cs` raises `event ContextMessage` for any `action` datagram; `ContextManager` subscribes and filters VR vs reward.
+- **behaviorMate** (`mcum96/behaviorMate_015_USB`, branch `main` — the custom serial-capable USB build, now on GitHub): `VrContextList2` (`class:"vr2"`) made control-only (start msg carries `vr_file`; no `vr_config`/cue streaming) + TDML logs `lap`+`vr_file`. Config `settings_vr_switch_AB.json` (A laps 0–4, B lap 5+, 0-indexed). Rebuild jar via `behaviorMate_src/build.ps1` (Windows) or `make all` (unix).
+- **Known v1 gotcha (→ motivates §7.1):** `ContextManager`'s `Preload On Start` ids + `vr_file` paths must EXACTLY match behaviorMate's config, or the switch silently no-ops (behaviorMate GUI shows it, Gimbl doesn't re-render).
+
 ---
 
 ## 5. CLAUDE.md ×4 (after v1)
@@ -112,10 +119,24 @@ Rejected the alternative (Gimbl builds from behaviorMate's streamed `vr_config`)
 
 ---
 
-## 7. v2 — Trigger variants + enforcement
-1. **Time-based trigger** (switch at elapsed time) — via behaviorMate's timed decorators.
-2. **First-of trigger** (lap# *or* time, whichever comes first).
-3. **`4021` ready-ack handshake** — Gimbl confirms "loaded context X"; behaviorMate verifies against expectation and logs it. Upgrades alignment from convention to **enforced** (can block a mismatched start) and makes the TDML Gimbl-confirmed. See the walkthrough in the appendix.
+## 7. v2 — Auto-announce, enforcement, trigger variants
+
+The v1 seam most in need of fixing: Gimbl's `ContextManager` requires the operator to mirror behaviorMate's context ids + `vr_file` paths into its `Preload On Start` list. That duplication is a **v1 crutch** with a **silent** failure mode — hit live 2026-07-16: stale paths / mismatched ids on the Gimbl side meant behaviorMate's start/stop arrived but `HandleContextMessage` ignored them (unknown id), so behaviorMate's GUI showed the switch while Gimbl kept rendering the old context. That is exactly the "wrong environment" error class this project exists to eliminate, so it leads v2.
+
+### 7.1 Auto-announce the context set (removes the Gimbl-side list)
+behaviorMate already knows the full set (ids + `vr_file`s) from its config; Gimbl shouldn't need them re-entered.
+- **behaviorMate:** in `VrContextList2.trialStart()`, emit one announce per VR context — `{"action":"preload","context":"<id>","vr_file":"<path>"}` (replaces the `vr_config` broadcast removed in v1 step 4). Each `vr2` context announces itself.
+- **Gimbl:** add a `"preload"` case to `ContextManager.HandleContextMessage` → `Preload(id, vr_file)` (the method already exists). Contexts build upfront, disabled → instant switching, no build hitch, **zero inspector config**.
+- After this lands, empty the `Preload On Start` list. The only Gimbl-side setting left is `Vr Context Root` (where the `.vr`s live on the Gimbl disk); it too can go away if behaviorMate sends a path both machines resolve (shared/UNC/absolute).
+- Note: v1 step 4 already carries `vr_file` on the **start** message, so a context lazy-preloads on first activation even without announce — announce just makes preloading **upfront, complete, and hitch-free**.
+
+### 7.2 Ready-ack handshake (`4021`) — alignment from convention to enforcement
+After preloading, Gimbl replies on `4021`: "loaded A, B". behaviorMate checks that against its config; on mismatch (missing file / wrong id / wrong set) it **warns or blocks the trial** rather than run the wrong world. This removes the *silent* property of the 7.1 / v1 failure: a mismatch becomes a loud refusal, not a no-op. Bonus: the TDML becomes **Gimbl-confirmed** — it records what actually rendered, not just what was commanded. (See the v2.3 appendix walkthrough.)
+
+### 7.3 Trigger variants (behaviorMate config only; Gimbl unchanged)
+1. **Time-based** — switch at elapsed time via behaviorMate's `TimedContextDecorator` / `DelayedContextDecorator`.
+2. **First-of** — lap# *or* time, whichever comes first.
+Both reuse the same start/stop messages, so there's no Gimbl-side work.
 
 ---
 
