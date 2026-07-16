@@ -23,10 +23,15 @@ namespace Gimbl
     /// the Day-1 log-only behaviour.
     ///
     /// Protocol (see integration handoff §5): behaviorMate sends one ASCII JSON
-    /// object per datagram to the display controller's ip:send_port. The only
-    /// message we consume is {"position":{"y":&lt;cm&gt;}}; geometry now lives in
-    /// Unity, so editContext/action/view/fog messages are ignored (optionally
-    /// logged). No handshake, no reply — the receiver is receive-only.
+    /// object per datagram to the display controller's ip:send_port. We consume
+    /// {"position":{"y":&lt;cm&gt;}} to drive the actor, and we forward context
+    /// CONTROL messages ({"action":...,"context":...,"vr_file"?:...}) on the
+    /// <see cref="ContextMessage"/> event so ContextManager can preload/switch VR
+    /// contexts (GIMBL_CONTEXT_SWITCHING_PLAN §4 step 3). Geometry itself lives in
+    /// Unity, so the streamed vr_config (no "action" field) is still ignored.
+    /// This receiver stays a dumb pipe: it does NOT decide which contexts are VR
+    /// (the naming gotcha in plan §3) — ContextManager filters VR vs reward, since
+    /// it owns the set of loaded VR ids. No handshake, no reply (receive-only) in v1.
     /// </summary>
     [AddComponentMenu("Gimbl/BehaviorMate Receiver")]
     public class BehaviorMateReceiver : MonoBehaviour
@@ -49,6 +54,26 @@ namespace Gimbl
 
         [Tooltip("Reverse the direction of travel if spinning the wheel runs the mouse backwards down the corridor.")]
         public bool invert = false;
+
+        /// <summary>
+        /// A behaviorMate context CONTROL message ({action, context, vr_file?}). action is
+        /// "start"/"stop"/"clear"/"create"; context is the context id; vrFile is the .vr path
+        /// carried by an Option-B VR start message (null for reward contexts / today's VR
+        /// messages before the behaviorMate step-4 change).
+        /// </summary>
+        public class ContextControlMessage
+        {
+            public string action;
+            public string context;
+            public string vrFile;
+        }
+
+        /// <summary>
+        /// Raised on the MAIN thread (from Update -&gt; HandleMessage) for every datagram that
+        /// carries an "action" field. ContextManager subscribes and decides which of these are
+        /// VR contexts. Fired regardless of listeners, so it's safe to have none.
+        /// </summary>
+        public event Action<ContextControlMessage> ContextMessage;
 
         private UdpClient client;
         private Thread receiveThread;
@@ -166,9 +191,25 @@ namespace Gimbl
                     actor.position = p;
                 }
             }
+            else if (parsed["action"] != null)
+            {
+                // Context control message. Forward it; ContextManager filters VR vs reward.
+                // We're on the main thread (Update -> HandleMessage), so subscribers may
+                // safely touch Unity objects (SetActive, RenderSettings, ...).
+                var msg = new ContextControlMessage
+                {
+                    action = parsed["action"].Value,
+                    context = parsed["context"] != null ? parsed["context"].Value : null,
+                    vrFile = parsed["vr_file"] != null ? parsed["vr_file"].Value : null,
+                };
+                if (logIgnoredMessages)
+                    Debug.Log(string.Format("BehaviorMate context msg: action={0} context={1} vr_file={2}",
+                        msg.action, msg.context ?? "-", msg.vrFile ?? "-"));
+                ContextMessage?.Invoke(msg);
+            }
             else if (logIgnoredMessages)
             {
-                // Geometry lives in Unity now; these are informational only.
+                // Geometry lives in Unity now; these (e.g. streamed vr_config) are informational only.
                 Debug.Log("BehaviorMate (ignored): " + message);
             }
         }
