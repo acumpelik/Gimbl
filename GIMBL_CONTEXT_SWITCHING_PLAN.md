@@ -1,6 +1,6 @@
 # Gimbl ↔ behaviorMate — Mid-Session VR Context Switching (Planning Doc)
 
-*Purpose: brief an implementer (fresh Claude Code session or a labmate) to build behaviorMate-driven mid-session VR context switching in Gimbl. Written 2026-07-16 after inspecting behaviorMate's Java source, Gimbl's `BehaviorMateReceiver`, and the config format. **Update 2026-07-16: v1 is IMPLEMENTED and switching live on the rig** (all 7 steps — see the "v1 status" box in §4). §7 is the current forward plan.*
+*Purpose: brief an implementer (fresh Claude Code session or a labmate) to build behaviorMate-driven mid-session VR context switching in Gimbl. Written 2026-07-16 after inspecting behaviorMate's Java source, Gimbl's `BehaviorMateReceiver`, and the config format. **Update 2026-07-16: v1 is IMPLEMENTED and switching live on the rig** (all 7 steps — see the "v1 status" box in §4). **v2 §7.1 done; §7.2 auto-announce/show-corridor done, 4021 handshake remaining** (see the status boxes in §7). §7.2's 4021 hello/ack is the current forward edge.*
 
 ---
 
@@ -130,8 +130,23 @@ behaviorMate already knows the full set (ids + `vr_file`s) from its config; Gimb
 - After this lands, empty the `Preload On Start` list. The only Gimbl-side setting left is `Vr Context Root` (where the `.vr`s live on the Gimbl disk); it too can go away if behaviorMate sends a path both machines resolve (shared/UNC/absolute).
 - Note: v1 step 4 already carries `vr_file` on the **start** message, so a context lazy-preloads on first activation even without announce — announce just makes preloading **upfront, complete, and hitch-free**.
 
-### 7.2 Ready-ack handshake (`4021`) — alignment from convention to enforcement
-After preloading, Gimbl replies on `4021`: "loaded A, B". behaviorMate checks that against its config; on mismatch (missing file / wrong id / wrong set) it **warns or blocks the trial** rather than run the wrong world. This removes the *silent* property of the 7.1 / v1 failure: a mismatch becomes a loud refusal, not a no-op. Bonus: the TDML becomes **Gimbl-confirmed** — it records what actually rendered, not just what was commanded. (See the v2.3 appendix walkthrough.)
+> **§7.1 status — DONE (2026-07-16), single-context load verified live.**
+> - **behaviorMate** (`mcum96/behaviorMate_015_USB@9a5435b`): `VrContextList2.trialStart()` emits `{action:preload, context, vr_file}` per `vr2` context. Fires for switch *and* single-context configs (verified: `TreadmillController` loops all contexts calling `trialStart`; `ContextListDecorator` forwards it, so the `timed_iti`-wrapped `4m_ctxD` in `settings_vr_reward.json` announces). `class:"vr"` (`VrContext`, singular) is dead code — `ContextsFactory` only builds `vr2`, so there's no second path.
+> - **Gimbl** (`acumpelik/GimblEnv@385ee36`): `ContextManager.HandleContextMessage` has a `"preload"` case → `Preload(id, vr_file)`. `BehaviorMateReceiver` needed no change (already forwards any `action` datagram with `vr_file` parsed).
+> - **Gotcha found live (now in memory `vr-file-path-gotcha`):** config `vr_file` MUST be an absolute path with **forward slashes** (`C:/…/x.vr`) or escaped `\\`. A raw `"C:\…"` is invalid JSON (`\U`) and the parser corrupts it before Gimbl sees it; Gimbl then no-ops **silently** (logs "file not found", no crash). This silent class is exactly what §7.2's ack kills.
+> - **Still to do on the rig:** verify the A/B *switch* end-to-end, then empty the `Preload On Start` inspector list (safe to leave populated meanwhile — `Preload` no-ops on known ids).
+
+### 7.2 Announce at config-load + show-corridor, then ready-ack handshake (`4021`)
+
+**Part A — announce at config-load + show the corridor before start (DONE 2026-07-16).**
+Motivation found live: with the announce only on `trialStart`, an operator who pressed Play then START quickly saw the mouse traverse *empty scenery* — the corridor hadn't built/switched yet. Fix: announce earlier and make the corridor visible pre-start so mistakes are caught before running.
+- **behaviorMate** (`mcum96/behaviorMate_015_USB@70d6973`): announce refactored into `announcePreload()`, now called from `setupComms()` (**config-load**, inside `reconfigureExperiment()`) in addition to `trialStart()`. Config-load is the early hook; the `trialStart` call stays as a **backstop** for when Gimbl connects after config-load (Gimbl's `Preload` is idempotent, so the duplicate is a no-op).
+- **Gimbl** (`acumpelik/GimblEnv@28e67b3`): new `showFirstOnPreload` (default on). On the announce, `ContextManager` builds every context disabled and **activates the FIRST one to load** (guarded by `Active == null` so a re-announce burst in config order shows A, not the last one); others stay built+hidden. Operator eyeballs A + skybox and confirms both loaded under `PreloadedContexts` before starting. behaviorMate's later `start` stays authoritative. Off for ML-Agents training (a schedule picks the first active context).
+- **Operator flow now:** Play in Unity **first**, then load the config in behaviorMate → corridor appears active pre-start. **Caveat still open:** if the config was loaded *before* Unity was in Play, Gimbl misses the config-load announce and falls back to build-at-start (no preview). Part B removes this.
+
+**Part B — ready-ack handshake (`4021`) — REMAINING, current forward edge.**
+After preloading, Gimbl replies on `4021`: "loaded A, B". behaviorMate checks that against its config; on mismatch (missing file / wrong id / wrong set) it **warns or blocks the trial** rather than run the wrong world. This removes the *silent* property of the 7.1 / v1 failure: a mismatch becomes a loud refusal, not a no-op. It also lets Gimbl send a `hello` on Play so behaviorMate **re-announces on demand** — closing the Part-A ordering caveat (Play-vs-config-load order stops mattering). Bonus: the TDML becomes **Gimbl-confirmed** — it records what actually rendered, not just what was commanded. (See the v2.3 appendix walkthrough.)
+- **New work required:** `4021` is currently unused — behaviorMate needs a new inbound UDP listener + a handler that (a) re-announces on `hello` and (b) validates Gimbl's ack against its config before allowing the trial. Gimbl's `BehaviorMateReceiver` gains a reply socket; `ContextManager` sends `hello` on start and an ack after building.
 
 ### 7.3 Trigger variants (behaviorMate config only; Gimbl unchanged)
 1. **Time-based** — switch at elapsed time via behaviorMate's `TimedContextDecorator` / `DelayedContextDecorator`.
