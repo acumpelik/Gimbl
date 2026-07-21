@@ -31,7 +31,15 @@ namespace Gimbl
     /// Unity, so the streamed vr_config (no "action" field) is still ignored.
     /// This receiver stays a dumb pipe: it does NOT decide which contexts are VR
     /// (the naming gotcha in plan §3) — ContextManager filters VR vs reward, since
-    /// it owns the set of loaded VR ids. No handshake, no reply (receive-only) in v1.
+    /// it owns the set of loaded VR ids.
+    ///
+    /// v2 §7.2 Part B (ready-ack handshake): the receiver also owns the REPLY channel
+    /// back to behaviorMate on its display controller's receive_port (4021). It exposes
+    /// <see cref="SendToBehaviorMate"/>; ContextManager composes the messages — a "hello"
+    /// on Play (so behaviorMate re-announces the context set) and a "ready" ack listing
+    /// the VR contexts it actually built (so behaviorMate can refuse a mismatch instead of
+    /// running the wrong world). The receiver stays protocol-thin: it knows the socket, not
+    /// the context set.
     /// </summary>
     [AddComponentMenu("Gimbl/BehaviorMate Receiver")]
     public class BehaviorMateReceiver : MonoBehaviour
@@ -54,6 +62,18 @@ namespace Gimbl
 
         [Tooltip("Reverse the direction of travel if spinning the wheel runs the mouse backwards down the corridor.")]
         public bool invert = false;
+
+        [Header("Reply channel (v2 §7.2 handshake)")]
+        [Tooltip("Send replies (hello / ready ack) back to behaviorMate. Turn off to run the old " +
+                 "receive-only behaviour (behaviorMate then can't confirm the right world loaded).")]
+        public bool sendReplies = true;
+
+        [Tooltip("Host to send replies to. behaviorMate runs on the same rig PC, so localhost.")]
+        public string replyHost = "127.0.0.1";
+
+        [Tooltip("Port behaviorMate listens on for the display controller's replies: its " +
+                 "controllers.display_1.receive_port. Default 4021.")]
+        public int replyPort = 4021;
 
         /// <summary>
         /// A behaviorMate context CONTROL message ({action, context, vr_file?}). action is
@@ -79,6 +99,7 @@ namespace Gimbl
         private Thread receiveThread;
         private volatile bool running;
         private readonly ConcurrentQueue<string> messageQueue = new ConcurrentQueue<string>();
+        private IPEndPoint replyEndpoint;
 
         void Start()
         {
@@ -211,6 +232,39 @@ namespace Gimbl
             {
                 // Geometry lives in Unity now; these (e.g. streamed vr_config) are informational only.
                 Debug.Log("BehaviorMate (ignored): " + message);
+            }
+        }
+
+        /// <summary>
+        /// v2 §7.2 Part B: send one JSON reply to behaviorMate's display receive_port (4021).
+        /// Used by ContextManager for the "hello" and "ready" ack. Sends from our existing
+        /// receive socket (source port = <see cref="port"/>), which behaviorMate's display
+        /// UdpClient reads regardless of source port. .NET sockets allow a send on the main
+        /// thread concurrently with the background Receive. No-op if replies are disabled or
+        /// the socket failed to bind.
+        /// </summary>
+        public void SendToBehaviorMate(string json)
+        {
+            if (!sendReplies || string.IsNullOrEmpty(json))
+                return;
+            if (client == null)
+            {
+                Debug.LogWarning("BehaviorMateReceiver: cannot send reply, socket not bound: " + json);
+                return;
+            }
+
+            try
+            {
+                if (replyEndpoint == null)
+                    replyEndpoint = new IPEndPoint(IPAddress.Parse(replyHost), replyPort);
+                byte[] data = Encoding.ASCII.GetBytes(json);
+                client.Send(data, data.Length, replyEndpoint);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning(string.Format(
+                    "BehaviorMateReceiver: failed to send reply to {0}:{1}: {2} ({3})",
+                    replyHost, replyPort, json, e.Message));
             }
         }
 
