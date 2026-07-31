@@ -263,6 +263,8 @@ namespace Gimbl
             // Movement settings.
             EditorGUILayout.LabelField("Movement Settings", EditorStyles.boldLabel);
             EditorGUI.indentLevel++;
+                if (this.GetType() == typeof(SimulatedLinearTreadmill))
+                    EditorGUILayout.PropertyField(serializedObject.FindProperty("simSpeed"), new GUIContent("Sim Speed"), LayoutSettings.editFieldOp);
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("gain"), true, LayoutSettings.editFieldOp);
                 EditorGUILayout.BeginHorizontal(LayoutSettings.editFieldOp); EditorGUILayout.PropertyField(serializedObject.FindProperty("inputSmooth"), new GUIContent("Input Smoothing")); EditorGUILayout.LabelField("(ms)", GUILayout.Width(70)); EditorGUILayout.EndHorizontal();
              EditorGUI.indentLevel--;

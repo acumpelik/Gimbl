@@ -37,7 +37,7 @@ namespace Gimbl
             // Keyboard mouse.
             if (settings.gamepadSettings.selectedGamepad == 0)
             {
-                moveControl = Input.GetAxis("Vertical") * passedTime * 0.008f;
+                moveControl = Input.GetAxis("Vertical") * passedTime * settings.simSpeed;
                 // Check button presses.
                 buttonPresses[0] = Input.GetButtonDown("Fire1");
                 buttonPresses[1] = Input.GetButtonDown("Fire2");

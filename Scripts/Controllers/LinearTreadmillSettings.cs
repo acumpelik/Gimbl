@@ -14,6 +14,7 @@ namespace Gimbl
         public bool loopPath = false;
         public LinearGain gain = new LinearGain();
         public int inputSmooth = 100;
+        public float simSpeed = 0.008f;   // Keyboard/mouse input gain for the simulated treadmill.
 
         public string[] buttonTopics;
         public GamepadSettings gamepadSettings;
