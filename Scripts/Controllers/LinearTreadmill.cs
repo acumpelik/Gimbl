@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using Gimbl;
 using System.Linq;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 using System;
 namespace Gimbl
 {
@@ -21,7 +23,7 @@ namespace Gimbl
             {
                 if (_path != value)
                 {
-                    if (EditorApplication.isPlaying && settings.isActive && settings.enableLogging)
+                    if (Application.isPlaying && settings.isActive && settings.enableLogging)
                     {
                         string oldPathStr;
                         string newPathStr;
@@ -213,8 +215,11 @@ namespace Gimbl
             lock (movement) { movement.Add(msg.pitch, 0, 0); }
         }
 
+        // Editor-only workflow methods (asset creation + Gimbl window GUI). Bodies are
+        // stripped from player builds; the settings asset is baked into the scene there.
         public override void LinkSettings(string assetPath = "")
         {
+#if UNITY_EDITOR
             LinearTreadmillSettings asset;
             if (assetPath == "")
             {
@@ -226,9 +231,11 @@ namespace Gimbl
                 asset = (LinearTreadmillSettings)UnityEditor.AssetDatabase.LoadAssetAtPath(assetPath, typeof(LinearTreadmillSettings));
             }
             settings = asset;
+#endif
         }
         public override void EditMenu()
         {
+#if UNITY_EDITOR
             SerializedObject serializedObject = new SerializedObject(settings);
             if (this.GetType() == typeof(SimulatedLinearTreadmill))
             {
@@ -277,6 +284,7 @@ namespace Gimbl
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("loopPath"), true, LayoutSettings.editFieldOp);
             serializedObject.ApplyModifiedProperties();
             EditorGUI.indentLevel--;
+#endif
         }
     }
 

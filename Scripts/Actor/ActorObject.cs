@@ -88,7 +88,10 @@ namespace Gimbl
                             }
                         }
                     }
+#if UNITY_EDITOR
+                    // Edit-mode only: mark the scene dirty so the changed link is saveable.
                     if (!EditorApplication.isPlaying) UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+#endif
                 }
             }
         }

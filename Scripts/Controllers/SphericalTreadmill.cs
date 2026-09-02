@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using Gimbl;
 using System.Linq;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 using System;
 
 namespace Gimbl
@@ -218,8 +220,11 @@ namespace Gimbl
             // pitch and roll: arc lengths in VR world units, yaw: rotation in degrees.
             lock (movement) { movement.Add(msg.roll,msg.yaw,msg.pitch); }
         }
+        // Editor-only workflow methods (asset creation + Gimbl window GUI). Bodies are
+        // stripped from player builds; the settings asset is baked into the scene there.
         public override void LinkSettings(string assetPath = "")
         {
+#if UNITY_EDITOR
             SphericalTreadmillSettings asset;
             if (assetPath == "")
             {
@@ -231,10 +236,12 @@ namespace Gimbl
                 asset = (SphericalTreadmillSettings)UnityEditor.AssetDatabase.LoadAssetAtPath(assetPath, typeof(SphericalTreadmillSettings));
             }
             settings = asset;
+#endif
         }
 
         public override void EditMenu()
         {
+#if UNITY_EDITOR
             SerializedObject serializedObject = new SerializedObject(settings);
             if (this.GetType() == typeof(SimulatedSphericalTreadmill))
             {
@@ -281,6 +288,7 @@ namespace Gimbl
             EditorGUILayout.PropertyField(serializedObject.FindProperty("loopPath"), true, LayoutSettings.editFieldOp);
             EditorGUI.indentLevel--;
             serializedObject.ApplyModifiedProperties();
+#endif
         }
     }
 

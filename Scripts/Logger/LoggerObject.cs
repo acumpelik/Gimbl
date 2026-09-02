@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
 using System.Text;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 
 namespace Gimbl
 {
@@ -39,6 +41,7 @@ namespace Gimbl
         {
             MQTTChannel<MQTTLogFile> logFileChannel = new MQTTChannel<MQTTLogFile>("Gimbl/Session/LogFile");
             logFileChannel.Event.AddListener(OnLogFileName);
+#if UNITY_EDITOR
             if (EditorPrefs.GetBool("Gimbl_externalLog", false)==false)
             {
                 // Check if log file already exists.
@@ -56,6 +59,10 @@ namespace Gimbl
                 while (logFile == null) { };
                 if (CheckFileExists(logFile.filePath)) { return; };
             }
+#endif
+            // In a player build no local log file is created (logFile stays null and all
+            // uses are null-guarded); one can still be assigned externally over MQTT via
+            // the Gimbl/Session/LogFile channel above.
         }
         private void Start()
         {
@@ -63,7 +70,7 @@ namespace Gimbl
             // Log start message.
             startMsg.time = System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             startMsg.scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
-            startMsg.project = PlayerSettings.productName;
+            startMsg.project = Application.productName;
             if (logFile != null) logFile.Log("Info", startMsg);
             // Setup Listener.
             MQTTRawChannel channel = new MQTTRawChannel("Log/");
@@ -83,7 +90,11 @@ namespace Gimbl
             if (System.IO.File.Exists(filePth))
             {
                 UnityEngine.Debug.LogError(string.Format("Log File:{0} already exists", Path.GetFileName(filePth)));
+#if UNITY_EDITOR
                 UnityEditor.EditorApplication.isPlaying = false;
+#else
+                Application.Quit();
+#endif
                 settings.sessionId++;
                 return true;
             }
@@ -159,10 +170,12 @@ namespace Gimbl
             stream.Close();
             // Remove temporary flag from log file "~" so that we can import the log file.
             System.IO.File.Move(string.Format("{0}~", filePath),filePath);
+#if UNITY_EDITOR
             if (EditorPrefs.GetBool("Gimbl_externalLog", false) == false)
             {
                 UnityEditor.AssetDatabase.ImportAsset(string.Format("Assets/Logs/{0}", Path.GetFileName(filePath)));
             }
+#endif
         }
     }
 }

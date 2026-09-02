@@ -37,9 +37,17 @@ namespace Gimbl
         void Start()
         {
             // Grab Settingss.
+#if UNITY_EDITOR
             ip = UnityEditor.EditorPrefs.GetString("JaneliaVR_MQTT_IP");
             port = UnityEditor.EditorPrefs.GetInt("JaneliaVR_MQTT_Port");
             sendFrame = UnityEditor.EditorPrefs.GetBool("Gimbl_sendFrameMsg");
+#else
+            // Player build: EditorPrefs does not exist. Keep values serialized in the
+            // scene if present, else default to a local broker; never send frame msgs.
+            if (string.IsNullOrEmpty(ip)) ip = "127.0.0.1";
+            if (port == 0) port = 1883;
+            sendFrame = false;
+#endif
             // Subscribe to some standard output channels.
             frameChannel = new MQTTChannel("Gimbl/Frame", false);
             startChannel = new MQTTChannel("Gimbl/Session/Start", false);
@@ -49,11 +57,13 @@ namespace Gimbl
             forceStartChannel = new MQTTChannel("Gimbl/Session/ForceStart", true);
             forceStartChannel.Event.AddListener(ForceStart);
             // wait for start signal.
+#if UNITY_EDITOR
             if (UnityEditor.EditorPrefs.GetBool("Gimbl_externalStart"))
             {
                 while (requestStart == false && requestStop == false) { }
             }
-            StartSession(); 
+#endif
+            StartSession();
         }
 
         async void StartSession()
@@ -65,7 +75,11 @@ namespace Gimbl
         void LateUpdate()
         {
             if (sendFrame) { frameChannel.Send(); }
+#if UNITY_EDITOR
             if (requestStop) { UnityEditor.EditorApplication.isPlaying = false; }
+#else
+            if (requestStop) { Application.Quit(); }
+#endif
         }
 
         void ForceStop()
